@@ -71,6 +71,11 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   gap: 16px;
   align-items: start;
 }
+/* 三栏子项允许收缩：窄屏下不把网格撑爆 */
+.workbench > aside,
+.workbench > main {
+  min-width: 0;
+}
 
 /* 卡片 */
 .card {
@@ -227,7 +232,8 @@ input[type="range"] { accent-color: var(--accent); }
 
 /* 移动端：画布高度自适应视口，工具栏按钮可换行点中，三栏变单列时中间图纸优先 */
 @media (max-width: 1024px) {
-  .workbench { grid-template-columns: 1fr; }
+  .workbench { grid-template-columns: minmax(0, 1fr); }
+  .workbench > * { min-width: 0; max-width: 100%; }
   .workbench > aside:first-of-type { order: 2; }
   .workbench > main { order: 1; }
   .workbench > aside:last-of-type { order: 3; }
@@ -236,6 +242,7 @@ input[type="range"] { accent-color: var(--accent); }
   .toolbar .btn { padding: 9px 16px; min-height: 40px; }
   .toolbar .zoom input { width: 130px; }
   .topbar { gap: 10px; padding: 0 12px; }
+  .topbar .brand small { display: none; }
   .topbar .top-summary { display: none; }
   .mode-tabs button { padding: 5px 12px; }
 }

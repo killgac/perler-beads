@@ -1,4 +1,6 @@
 // 上传组件：选图 + 目标宽度（豆数），只负责输入，不做像素化
+import { useEffect, useState } from 'react';
+
 interface Props {
   width: number;
   onWidthChange: (w: number) => void;
@@ -7,6 +9,13 @@ interface Props {
 }
 
 export default function Uploader({ width, onWidthChange, onFile, disabled }: Props) {
+  // 本地文本态：输入过程只改文本不回写，失焦/回车才提交，避免输一半被钳制拽回
+  const [text, setText] = useState(String(width));
+  const [focused, setFocused] = useState(false);
+  // 外部宽度变化时同步；聚焦输入中不同步，不打断打字
+  useEffect(() => {
+    if (!focused) setText(String(width));
+  }, [width, focused]);
   return (
     <div className="card">
       <div className="card-title"><span className="step">1</span>上传图片</div>
@@ -34,22 +43,33 @@ export default function Uploader({ width, onWidthChange, onFile, disabled }: Pro
           type="number"
           min={8}
           max={256}
-          value={width}
+          value={text}
           disabled={disabled}
+          onFocus={() => setFocused(true)}
           onChange={(e) => {
-            // q1 非法输入钳制：清空/负数/小数/超范围统一收敛到 8～256 整数
-            const raw = e.target.value;
-            if (raw.trim() === '') return; // 输入中途清空不跳变，沿用旧值
-            const n = Math.round(Number(raw));
-            if (!Number.isFinite(n)) return;
-            onWidthChange(Math.max(8, Math.min(256, n)));
+            // 输入过程只改本地文本：允许清空与输一半，不回写受控值
+            setText(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            // 回车即提交，免去先点别处失焦
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
           onBlur={(e) => {
-            // 失焦兜底：仍非法则回填当前钳制值
-            const n = Math.round(Number(e.target.value));
-            if (!Number.isFinite(n) || n < 8 || n > 256) {
-              e.target.value = String(width);
+            setFocused(false);
+            // 失焦兜底：非法则回填当前钳制值，合法则规范为整数文本
+            const raw = e.target.value;
+            if (raw.trim() === '') {
+              setText(String(width));
+              return;
             }
+            const n = Math.round(Number(raw));
+            if (!Number.isFinite(n)) {
+              setText(String(width));
+              return;
+            }
+            const clamped = Math.max(8, Math.min(256, n));
+            onWidthChange(clamped);
+            setText(String(clamped));
           }}
         />
       </div>
