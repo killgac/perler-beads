@@ -26,8 +26,16 @@ interface Props {
 }
 
 const CELL = 28; // 每颗豆边长（px），保证色号字可读
-const MIN_ZOOM = 0.2;
+const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3;
+const MAX_BACKING = 2048; // 显示画布 backing 长边上限：超限自动缩小格宽，防移动端 GPU 分配失败白屏
+
+/** 显示用格宽：整图 backing 长边不超过 MAX_BACKING（移动端防白屏），导出不受影响 */
+export function displayCell(w: number, h: number): number {
+  const longest = Math.max(w, h, 1);
+  if (longest * CELL <= MAX_BACKING) return CELL;
+  return Math.max(10, Math.floor(MAX_BACKING / longest));
+}
 
 /** 图纸绘制共用函数：导出 PNG 与屏幕显示用同一套绘制；highlight 仅屏幕显示用 */
 export function drawBlueprint(
@@ -128,10 +136,11 @@ export function drawBlueprintCell(
   y: number,
   highlightColor?: number | null,
   highlight?: { x: number; y: number } | null,
+  cellSize: number = CELL,
 ): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  drawBlueprintCellRich(ctx, grid, palette, x, y, highlightColor, highlight, CELL);
+  drawBlueprintCellRich(ctx, grid, palette, x, y, highlightColor, highlight, cellSize);
 }
 
 export function downloadPNG(canvas: HTMLCanvasElement): void {
@@ -239,14 +248,15 @@ export default function BlueprintCanvas({ grid, palette, selectedColor, eraser, 
 
   useEffect(() => {
     if (ref.current) {
-      drawBlueprint(ref.current, gridRef.current, paletteRef.current, null, highlightColorRef.current);
+      drawBlueprint(ref.current, gridRef.current, paletteRef.current, null, highlightColorRef.current, displayCell(gridRef.current[0]?.length ?? 0, gridRef.current.length));
       // 整图重绘后按当前 hover 补框
       if (highlight && ref.current) {
         const c = ref.current.getContext('2d');
         if (c) {
+          const cs = displayCell(gridRef.current[0]?.length ?? 0, gridRef.current.length);
           c.strokeStyle = '#ff0000';
           c.lineWidth = 3;
-          c.strokeRect(highlight.x * CELL + 1.5, highlight.y * CELL + 1.5, CELL - 3, CELL - 3);
+          c.strokeRect(highlight.x * cs + 1.5, highlight.y * cs + 1.5, cs - 3, cs - 3);
         }
       }
       prevHighlight.current = highlight;
@@ -264,41 +274,53 @@ export default function BlueprintCanvas({ grid, palette, selectedColor, eraser, 
     const g = gridRef.current;
     const p = paletteRef.current;
     const hc = highlightColorRef.current;
+    const cs = displayCell(g[0]?.length ?? 0, g.length);
     const prev = prevHighlight.current;
     // 擦掉旧 hover 框：重画该格（含同色红框还原）
     if (prev && (!highlight || prev.x !== highlight.x || prev.y !== highlight.y)) {
-      drawBlueprintCell(canvas, g, p, prev.x, prev.y, hc, null);
+      drawBlueprintCell(canvas, g, p, prev.x, prev.y, hc, null, cs);
     }
     // 画新 hover 框：重画该格再补框
     if (highlight && (!prev || prev.x !== highlight.x || prev.y !== highlight.y)) {
-      drawBlueprintCell(canvas, g, p, highlight.x, highlight.y, hc, highlight);
+      drawBlueprintCell(canvas, g, p, highlight.x, highlight.y, hc, highlight, cs);
     }
     prevHighlight.current = highlight;
   }, [highlight]);
 
   // grid 尺寸变化（新图/新画布）时回到自适应；仅 hover 变化不触发
+  // 自适应含义：初始缩放让整图宽度正好占满容器；移动端容器窄时算出的缩放很小，
+  // 需放行到 MIN_ZOOM（0.1），否则卡在 0.2 下限会被放大裁切
   const gridKey = `${grid.length}x${grid[0]?.length ?? 0}`;
   useEffect(() => {
-    const w = grid[0]?.length ?? 0;
-    const boxW = boxRef.current?.clientWidth ?? 0;
-    if (w > 0 && boxW > 0) {
-      setZoom(Math.min(1.5, Math.max(MIN_ZOOM, boxW / (w * CELL))));
-    } else {
-      setZoom(1);
-    }
+    setZoom(fitZoom(grid[0]?.length ?? 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gridKey]);
 
-  const z = zoom ?? 1;
-
-  function resetView() {
+  // gridKey 变化且容器尚无宽度（如移动端单列刚切布局）时补算一次，避免 zoom 永久为 null
+  useEffect(() => {
+    if (zoom !== null) return;
     const w = grid[0]?.length ?? 0;
+    if (w <= 0) return;
+    const t = window.setTimeout(() => setZoom(fitZoom(w)), 60);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, gridKey]);
+
+  const z = zoom ?? 1;
+  // 显示格宽：容器超窄时缩小 backing，避免 canvas 实际像素过大在移动端 GPU 分配失败
+  // 导出走 E2 自适应离屏图，不受影响
+  const cell = displayCell(grid[0]?.length ?? 0, grid.length);
+
+  function fitZoom(w: number): number {
     const boxW = boxRef.current?.clientWidth ?? 0;
     if (w > 0 && boxW > 0) {
-      setZoom(Math.min(1.5, Math.max(MIN_ZOOM, boxW / (w * CELL))));
-    } else {
-      setZoom(1);
+      return Math.min(1.5, Math.max(MIN_ZOOM, boxW / (w * CELL)));
     }
+    return 1;
+  }
+
+  function resetView() {
+    setZoom(fitZoom(grid[0]?.length ?? 0));
     onHoverCell(null);
   }
 
@@ -308,8 +330,8 @@ export default function BlueprintCanvas({ grid, palette, selectedColor, eraser, 
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = Math.floor(((e.clientX - rect.left) * scaleX) / CELL);
-    const y = Math.floor(((e.clientY - rect.top) * scaleY) / CELL);
+    const x = Math.floor(((e.clientX - rect.left) * scaleX) / cell);
+    const y = Math.floor(((e.clientY - rect.top) * scaleY) / cell);
     if (x < 0 || y < 0 || y >= grid.length || x >= (grid[0]?.length ?? 0)) return null;
     return { x, y };
   }
@@ -372,8 +394,9 @@ export default function BlueprintCanvas({ grid, palette, selectedColor, eraser, 
           style={{
             cursor: selectedColor === null && !eraser ? 'default' : 'pointer',
             // CSS 缩放显示：canvas 实际像素不变，导出不受影响；点击坐标换算已考虑缩放
-            width: (grid[0]?.length ?? 0) * CELL * z,
-            height: grid.length * CELL * z,
+            width: (grid[0]?.length ?? 0) * cell * z,
+            height: grid.length * cell * z,
+            maxWidth: '100%',
             touchAction: 'none',
           }}
           onPointerDown={(e) => {

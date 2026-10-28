@@ -12,7 +12,7 @@ import Uploader from './components/Uploader';
 import SizePanel from './components/SizePanel';
 import PaletteSelector from './components/PaletteSelector';
 import PreviewCompare from './components/PreviewCompare';
-import BlueprintCanvas, { drawBlueprintCell } from './components/BlueprintCanvas';
+import BlueprintCanvas, { displayCell, drawBlueprintCell } from './components/BlueprintCanvas';
 import ColorStats from './components/ColorStats';
 import ExportPanel from './components/ExportPanel';
 import BlankEditor from './components/BlankEditor';
@@ -328,7 +328,8 @@ export default function App() {
     newRow[x] = value;
     painted[y] = newRow;
     const isHover = hoverCell !== null && hoverCell.x === x && hoverCell.y === y;
-    drawBlueprintCell(blueprintCanvas, painted, palette, x, y, eraser ? null : selectedColor, isHover ? hoverCell : null);
+    const cs = displayCell(grid[0]?.length ?? 0, grid.length);
+    drawBlueprintCell(blueprintCanvas, painted, palette, x, y, eraser ? null : selectedColor, isHover ? hoverCell : null, cs);
   }
 
   // 一键清空：整张图纸全部置为空白-1（记一次撤销）

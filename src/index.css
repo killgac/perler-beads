@@ -71,9 +71,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   gap: 16px;
   align-items: start;
 }
-@media (max-width: 1024px) {
-  .workbench { grid-template-columns: 1fr; }
-}
 
 /* 卡片 */
 .card {
@@ -222,11 +219,26 @@ input[type="range"] { accent-color: var(--accent); }
   background-color: #fbfcfd;
   background-image: radial-gradient(#dfe3ea 1px, transparent 1px);
   background-size: 14px 14px;
-  display: grid;
-  place-items: start center;
+  display: block;
   padding: 18px;
+  text-align: center;
 }
-.canvas-wrap canvas { background: #fff; box-shadow: var(--shadow); border-radius: 4px; }
+.canvas-wrap canvas { background: #fff; box-shadow: var(--shadow); border-radius: 4px; max-width: 100%; height: auto; }
+
+/* 移动端：画布高度自适应视口，工具栏按钮可换行点中，三栏变单列时中间图纸优先 */
+@media (max-width: 1024px) {
+  .workbench { grid-template-columns: 1fr; }
+  .workbench > aside:first-of-type { order: 2; }
+  .workbench > main { order: 1; }
+  .workbench > aside:last-of-type { order: 3; }
+  .canvas-wrap { height: min(70vh, 560px); padding: 12px; }
+  .toolbar { gap: 8px; }
+  .toolbar .btn { padding: 9px 16px; min-height: 40px; }
+  .toolbar .zoom input { width: 130px; }
+  .topbar { gap: 10px; padding: 0 12px; }
+  .topbar .top-summary { display: none; }
+  .mode-tabs button { padding: 5px 12px; }
+}
 .toolbar {
   margin-top: 12px;
   display: flex;
